@@ -20,34 +20,42 @@ const QuickAddButton: React.FC<{onClick: () => void, disabled: boolean, children
 
 
 const AddFuelModal: React.FC<AddFuelModalProps> = ({ onClose, onAddFuel, tankCapacity, currentFuel }) => {
-  const maxFuelToAdd = tankCapacity - currentFuel;
-  // Initialize with a sensible default, like 5L or whatever is left to fill up, whichever is smaller.
-  const [liters, setLiters] = useState(Math.max(0, Math.min(5, maxFuelToAdd)).toFixed(2));
+  const maxFuelToAdd = Math.max(0, tankCapacity - currentFuel);
+  const [liters, setLiters] = useState(Math.min(5, maxFuelToAdd).toFixed(2));
+
+  // Parse the string value once for cleaner logic
+  const amountToAdd = parseFloat(liters);
+  const isValidAmount = !isNaN(amountToAdd) && amountToAdd > 0 && amountToAdd <= maxFuelToAdd;
 
   const handleAddFuel = () => {
-    const amount = parseFloat(liters);
-    if (!isNaN(amount) && amount > 0) {
-      onAddFuel(amount);
+    if (isValidAmount) {
+      onAddFuel(amountToAdd);
       onClose();
     }
   };
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Allow empty input for typing, but clamp value
     const value = e.target.value;
-    if (value === '') {
-        setLiters('');
-        return;
-    }
-    const numericValue = parseFloat(value);
-    if (!isNaN(numericValue)) {
-        const clampedValue = Math.max(0, Math.min(numericValue, maxFuelToAdd));
-        // Avoid changing the user's input if they are typing a decimal, e.g. "5."
-        if (numericValue.toString() !== value && value.slice(-1) !== '.') {
-             setLiters(clampedValue.toString());
+    // Allow typing numbers and a decimal point
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+        const numericValue = parseFloat(value);
+        if (!isNaN(numericValue) && numericValue > maxFuelToAdd) {
+            setLiters(maxFuelToAdd.toFixed(2));
         } else {
-             setLiters(value);
+            setLiters(value);
         }
+    }
+  };
+
+  const handleBlur = () => {
+    const parsed = parseFloat(liters);
+    // If input is invalid or zero, reset to "0.00"
+    if (isNaN(parsed) || parsed <= 0) {
+        setLiters('0.00');
+    } else {
+        // Otherwise, clamp to the max and format to 2 decimal places
+        const clamped = Math.min(parsed, maxFuelToAdd);
+        setLiters(clamped.toFixed(2));
     }
   };
 
@@ -56,7 +64,7 @@ const AddFuelModal: React.FC<AddFuelModalProps> = ({ onClose, onAddFuel, tankCap
   };
 
   const setAmount = (amount: number) => {
-    const clampedAmount = Math.max(0, Math.min(amount, maxFuelToAdd));
+    const clampedAmount = Math.min(amount, maxFuelToAdd);
     setLiters(clampedAmount.toFixed(2));
   };
 
@@ -86,11 +94,12 @@ const AddFuelModal: React.FC<AddFuelModalProps> = ({ onClose, onAddFuel, tankCap
                   id="fuel-amount"
                   value={liters}
                   onChange={handleInputChange}
-                  onBlur={() => setLiters(parseFloat(liters || '0').toFixed(2))} // Format on blur
+                  onBlur={handleBlur}
                   min="0"
                   max={maxFuelToAdd.toFixed(2)}
                   step="0.01"
                   className="w-full bg-gray-900 border border-gray-600 rounded-md p-2 text-white text-lg focus:ring-cyan-500 focus:border-cyan-500"
+                  placeholder="0.00"
               />
           </div>
         </div>
@@ -100,7 +109,7 @@ const AddFuelModal: React.FC<AddFuelModalProps> = ({ onClose, onAddFuel, tankCap
                 min="0"
                 max={maxFuelToAdd.toFixed(2)}
                 step="0.01"
-                value={liters}
+                value={isNaN(amountToAdd) ? 0 : amountToAdd}
                 onChange={handleSliderChange}
                 className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
             />
@@ -110,10 +119,10 @@ const AddFuelModal: React.FC<AddFuelModalProps> = ({ onClose, onAddFuel, tankCap
         </p>
         <button
           onClick={handleAddFuel}
-          disabled={parseFloat(liters || '0') <= 0 || parseFloat(liters || '0') > maxFuelToAdd}
+          disabled={!isValidAmount}
           className="w-full bg-cyan-600 text-white font-bold py-3 px-4 rounded-md hover:bg-cyan-500 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed text-lg"
         >
-          Confirm Add {parseFloat(liters || '0').toFixed(2)} L
+          Confirm Add {(!isNaN(amountToAdd) && amountToAdd > 0) ? amountToAdd.toFixed(2) : '0.00'} L
         </button>
       </div>
     </Modal>

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Modal from './Modal';
 import type { Settings } from '../types';
@@ -11,12 +10,21 @@ interface SettingsModalProps {
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, settings, setEconomy, setReserve }) => {
-  const [economy, setLocalEconomy] = useState(settings.fuelEconomyKmPerL);
-  const [reserve, setLocalReserve] = useState(settings.reserveLiters);
+  const [economy, setLocalEconomy] = useState(settings.fuelEconomyKmPerL.toString());
+  const [reserve, setLocalReserve] = useState(settings.reserveLiters.toString());
 
   const handleSave = () => {
-    setEconomy(economy);
-    setReserve(reserve);
+    const newEconomy = parseFloat(economy);
+    const newReserve = parseFloat(reserve);
+
+    // Validate before saving to prevent NaN or invalid values from corrupting state
+    if (!isNaN(newEconomy) && newEconomy > 0) {
+      setEconomy(newEconomy);
+    }
+    if (!isNaN(newReserve) && newReserve >= 0.1 && newReserve <= 5) {
+      setReserve(newReserve);
+    }
+
     onClose();
   };
 
@@ -31,10 +39,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, settings, setEco
             type="number"
             id="fuel-economy"
             value={economy}
-            onChange={(e) => setLocalEconomy(parseFloat(e.target.value))}
+            onChange={(e) => setLocalEconomy(e.target.value)}
             min="1"
             step="0.1"
             className="mt-1 w-full bg-gray-900 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500"
+            placeholder="e.g. 44.0"
           />
           <p className="text-xs text-gray-400 mt-1">Set your bike's average mileage.</p>
         </div>
@@ -46,11 +55,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, settings, setEco
             type="number"
             id="reserve-liters"
             value={reserve}
-            onChange={(e) => setLocalReserve(parseFloat(e.target.value))}
+            onChange={(e) => setLocalReserve(e.target.value)}
             min="0.1"
             max="5"
             step="0.1"
             className="mt-1 w-full bg-gray-900 border border-gray-600 rounded-md p-2 text-white focus:ring-cyan-500 focus:border-cyan-500"
+            placeholder="e.g. 1.5"
           />
            <p className="text-xs text-gray-400 mt-1">Get a notification when fuel drops to this level.</p>
         </div>
