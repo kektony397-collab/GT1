@@ -27,6 +27,7 @@ export type LocationPermission = 'prompt' | 'granted' | 'denied';
 
 export interface LocationState {
     permission: LocationPermission;
+    status: 'idle' | 'tracking' | 'error' | 'checking';
     speedKph: number;
     error: string | null;
 }

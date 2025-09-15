@@ -16,7 +16,27 @@ const App: React.FC = () => {
   const { locationState } = bikeState;
 
   const renderGpsStatus = () => {
-    if (locationState.permission === 'prompt') {
+    const { permission, status, error } = locationState;
+
+    if (status === 'checking') {
+      return (
+        <div className="bg-gray-700/30 text-gray-300 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+          <MapPin className="w-5 h-5 animate-pulse" />
+          <span>Checking GPS permissions...</span>
+        </div>
+      );
+    }
+    
+    if (permission === 'denied') {
+      return (
+        <div className="bg-red-500/20 text-red-300 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+          <MapPin className="w-5 h-5" />
+          <span>GPS permission denied. Live tracking is disabled.</span>
+        </div>
+      );
+    }
+
+    if (permission === 'prompt') {
       return (
         <div className="bg-yellow-500/20 text-yellow-300 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
           <MapPin className="w-5 h-5" />
@@ -30,23 +50,17 @@ const App: React.FC = () => {
         </div>
       );
     }
-    if (locationState.permission === 'denied') {
-      return (
-        <div className="bg-red-500/20 text-red-300 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-          <MapPin className="w-5 h-5" />
-          <span>GPS permission denied. Live tracking is disabled.</span>
-        </div>
-      );
-    }
-    if (locationState.error) {
+    
+    if (status === 'error') {
        return (
         <div className="bg-red-500/20 text-red-300 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
           <MapPin className="w-5 h-5" />
-          <span>GPS Error: {locationState.error}</span>
+          <span>GPS Error: {error}</span>
         </div>
       );
     }
-    if (locationState.permission === 'granted') {
+
+    if (permission === 'granted') {
        return (
         <div className="bg-green-500/20 text-green-300 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
           <MapPin className="w-5 h-5" />
@@ -54,6 +68,7 @@ const App: React.FC = () => {
         </div>
       );
     }
+
     return null;
   };
 

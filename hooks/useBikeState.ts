@@ -22,6 +22,7 @@ export const useBikeState = () => {
   const [refuelRecords, setRefuelRecords] = useState<RefuelRecord[]>(() => getStoredValue(LOCAL_STORAGE_KEYS.records, []));
   const [locationState, setLocationState] = useState<LocationState>({
       permission: 'prompt',
+      status: 'checking',
       speedKph: 0,
       error: null,
   });
@@ -55,13 +56,23 @@ export const useBikeState = () => {
   }, [state.currentFuelL, settings.reserveLiters]);
 
   // --- Location Tracking Logic ---
+   const stopLocationTracking = useCallback(() => {
+      if (watchId.current !== null) {
+          navigator.geolocation.clearWatch(watchId.current);
+          watchId.current = null;
+          lastPosition.current = null;
+          setLocationState(prev => ({ ...prev, status: 'idle', speedKph: 0 }));
+      }
+  }, []);
+
   const handlePositionUpdate = useCallback((position: GeolocationPosition) => {
     const { latitude, longitude, speed } = position.coords;
     const currentTime = position.timestamp;
 
-    // Convert speed from m/s to km/h, null check for safety
     const speedKph = speed ? speed * 3.6 : 0;
-    setLocationState(prev => ({ ...prev, speedKph, error: null }));
+    
+    // First successful update confirms tracking is active
+    setLocationState(prev => ({ ...prev, status: 'tracking', speedKph, error: null }));
     
     if (lastPosition.current) {
         const distanceKm = calculateDistance(
@@ -89,12 +100,12 @@ export const useBikeState = () => {
     lastPosition.current = { lat: latitude, lon: longitude, time: currentTime };
   }, [settings.fuelEconomyKmPerL]);
 
-  const handlePositionError = (error: GeolocationPositionError) => {
+  const handlePositionError = useCallback((error: GeolocationPositionError) => {
       let errorMessage = 'An unknown GPS error occurred.';
       switch(error.code) {
           case error.PERMISSION_DENIED:
               errorMessage = 'GPS access was denied.';
-              setLocationState(prev => ({ ...prev, permission: 'denied', error: errorMessage }));
+              setLocationState(prev => ({ ...prev, permission: 'denied', status: 'idle', error: errorMessage }));
               stopLocationTracking();
               return;
           case error.POSITION_UNAVAILABLE:
@@ -104,71 +115,64 @@ export const useBikeState = () => {
               errorMessage = 'The request to get user location timed out.';
               break;
       }
-      setLocationState(prev => ({ ...prev, error: errorMessage }));
-  };
-
-  const stopLocationTracking = () => {
-      if (watchId.current !== null) {
-          navigator.geolocation.clearWatch(watchId.current);
-          watchId.current = null;
-          lastPosition.current = null;
-          setLocationState(prev => ({ ...prev, speedKph: 0 }));
-      }
-  };
+      setLocationState(prev => ({ ...prev, status: 'error', error: errorMessage }));
+  }, [stopLocationTracking]);
 
   const startLocationTracking = useCallback(() => {
-    if ('geolocation' in navigator) {
-      stopLocationTracking(); // Clear any existing watch
-      const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
-      watchId.current = navigator.geolocation.watchPosition(handlePositionUpdate, handlePositionError, options);
-    } else {
-      setLocationState(prev => ({ ...prev, error: "Geolocation is not supported by this browser." }));
-    }
-  }, [handlePositionUpdate]);
-
-  const requestLocationPermission = useCallback(async () => {
     if (!('geolocation' in navigator)) {
-        setLocationState(prev => ({ ...prev, error: 'Geolocation not supported.' }));
+        setLocationState(prev => ({ ...prev, permission: 'denied', status: 'error', error: "Geolocation is not supported."}));
         return;
     }
+    if (watchId.current !== null) return; // Already watching
+    
+    setLocationState(prev => ({ ...prev, status: 'tracking', error: null }));
 
-    try {
-        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
-        if (permissionStatus.state === 'granted') {
-            setLocationState(prev => ({ ...prev, permission: 'granted', error: null }));
-            startLocationTracking();
-        } else if (permissionStatus.state === 'prompt') {
-            setLocationState(prev => ({ ...prev, permission: 'prompt' }));
-            // The browser will prompt on first use of watchPosition
-            startLocationTracking();
-        } else if (permissionStatus.state === 'denied') {
-            setLocationState(prev => ({ ...prev, permission: 'denied', error: 'GPS access was denied.' }));
-        }
+    const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+    watchId.current = navigator.geolocation.watchPosition(handlePositionUpdate, handlePositionError, options);
+  }, [handlePositionUpdate, handlePositionError]);
 
-        permissionStatus.onchange = () => {
-            if (permissionStatus.state === 'granted') {
-                setLocationState({ permission: 'granted', speedKph: 0, error: null });
-                startLocationTracking();
-            } else {
-                setLocationState({ permission: 'denied', speedKph: 0, error: 'GPS access was denied.' });
-                stopLocationTracking();
-            }
-        };
-    } catch (error) {
-        // Fallback for browsers that don't support Permissions API
-        startLocationTracking();
-    }
+  const requestLocationPermission = useCallback(() => {
+      startLocationTracking();
   }, [startLocationTracking]);
   
   // Initial permission check and cleanup
   useEffect(() => {
-      requestLocationPermission();
+     const checkPermissionAndStart = async () => {
+        if (!('geolocation' in navigator) || !('permissions' in navigator)) {
+            setLocationState(prev => ({...prev, status: 'idle'}));
+            return;
+        }
+
+        try {
+            const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+
+            const updateStateFromStatus = (status: PermissionState) => {
+                if (status === 'granted') {
+                    setLocationState(prev => ({ ...prev, permission: 'granted', status: 'idle' }));
+                    startLocationTracking();
+                } else if (status === 'prompt') {
+                    setLocationState(prev => ({ ...prev, permission: 'prompt', status: 'idle' }));
+                } else if (status === 'denied') {
+                    setLocationState(prev => ({ ...prev, permission: 'denied', status: 'idle', error: 'GPS access was denied.' }));
+                }
+            };
+
+            updateStateFromStatus(permissionStatus.state);
+            permissionStatus.onchange = () => updateStateFromStatus(permissionStatus.state);
+
+        } catch (e) {
+            console.error("Failed to query permissions", e);
+            setLocationState(prev => ({ ...prev, status: 'idle' }));
+        }
+    };
+    
+    checkPermissionAndStart();
       if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
         Notification.requestPermission();
       }
       return () => stopLocationTracking();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only once
+  }, [startLocationTracking]);
 
   // --- Public Action Methods ---
   const addFuel = useCallback((liters: number) => {
