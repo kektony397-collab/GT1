@@ -1,0 +1,5 @@
+{
+  "name": "Copy of Smart Bike Dashboard",
+  "description": "A futuristic, responsive HTML dashboard for a motorcycle that tracks speed, GPS distance, fuel level and range in real time, allows manual inputs, issues reserve notifications, and persists data across sessions.",
+  "requestFramePermissions": []
+}
